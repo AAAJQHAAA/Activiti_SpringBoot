@@ -18,7 +18,9 @@ import org.activiti.engine.impl.pvm.process.TransitionImpl;
 import org.activiti.engine.runtime.ProcessInstance;
 import org.activiti.engine.task.Task;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 
+@Component
 public class Rollback {
 
 	@Autowired
@@ -148,7 +150,7 @@ public class Rollback {
 			List<Task> tasks = taskService.createTaskQuery().processInstanceId(instance.getId()).taskDefinitionKey(currTask.getTaskDefinitionKey()).list();
 			for (Task task : tasks) {
 				taskService.complete(task.getId(), variables);
-				historyService.deleteHistoricTaskInstance(task.getId());
+				//historyService.deleteHistoricTaskInstance(task.getId());
 			}
 			// 恢复方向
 			for (TransitionImpl transitionImpl : newTransitions) {

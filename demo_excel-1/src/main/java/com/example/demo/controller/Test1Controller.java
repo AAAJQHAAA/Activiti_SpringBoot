@@ -42,6 +42,7 @@ import com.example.demo.entity.UserTaskProDef;
 import com.example.demo.mycustom.MycustomService;
 import com.example.demo.utils.ProcessDefinitionTOmyProcessDefinition;
 import com.example.demo.utils.ProcessInstanceTOmyProcessInstance;
+import com.example.demo.utils.Rollback;
 import com.example.demo.utils.TasktoMyTask;
 import com.example.demo.utils.UserTaskToUserTaskProDef;
 
@@ -900,12 +901,10 @@ public class Test1Controller {
         BpmnModel model = repositoryService.getBpmnModel(processDefIdkey);
         return new String(new BpmnXMLConverter().convertToXML(model));
     }
-    /**
-     * 任务回退
-     */
 
-/**
-     * 任务回退
+
+    /**
+     * 任务回退一步(方式一)(个人感觉比较垃圾：不弄了)
      * @param remark
      * @param taskId    当前任务id
      * @return
@@ -918,53 +917,68 @@ public class Test1Controller {
      * 		4，更新运行任务表当前任务回退到跳转之前的任务TASK_DEF_KEY_,FORM_KEY_,NAME_,ID_四个字段和历史任务表中的任务一致
      * 		5，更新运行实例表中的当前运行流程实例中的ACT_ID_字段，该字段和运行任务表中任务定义id即TASK_DEF_KEY_字段一致
      */
-//    @RequestMapping(value="rollBack",method =  RequestMethod.POST )
-//    @ResponseBody
-//    public MessageBody rollBack(@RequestParam(value="remark",required=false)String remark,
-//            				@RequestParam(value="taskId",required=true)String taskId) throws Exception{
-//        Task task=workFlowService.getTaskById(taskId);
-//        ProcessInstance pi = runtimeService.createProcessInstanceQuery().processInstanceId(task.getProcessInstanceId()).singleResult();
-//        //4.使用流程实例对象获取BusinessKey
-//        String business_key = pi.getBusinessKey();
-//        String execId=task.getExecutionId();
-//        CheckSheetProHis his=new CheckSheetProHis();
-//        his.setId(ToolUtils.getUUID());
-//        his.setCheckProId(business_key);
-//        his.setOptime(DateUtil.toString(new Date()));
-//        if(remark!=null){
-//            his.setShenpiremark(remark);
-//        }
-//        his.setShenpiaction(task.getName()+"-撤銷");
-//        his.setExecutor(UCHome.getLabUser().getName());
-// 
-//        String processInstanceId = task.getProcessInstanceId();
-//        List<HistoricTaskInstance> list = historyService
-//            .createHistoricTaskInstanceQuery()
-//            .processInstanceId(processInstanceId).finished()
-//            .orderByTaskCreateTime().desc().list();
-//        String parentTaskId="";
-//        if (list != null && list.size() > 0) {
-//            //按照完成时间排序取第一个 回退到该节点
-//            parentTaskId=list.get(0).getId();
-//            for (HistoricTaskInstance hti : list) {
-//                System.out.print("taskId:" + hti.getId()+"，");
-//                System.out.print("name:" + hti.getName()+"，");
-//                System.out.print("pdId:" + hti.getProcessDefinitionId()+"，");
-//                System.out.print("assignee:" + hti.getAssignee()+"，");
-//            }
-//        }
-//        //workFlowService.TaskRollBack(taskId);
-//        if(StringUtils.isNotBlank(parentTaskId)){
-//            //插入审批记录
-//            //退回任务
-//            checkSheetClient.rollBackTask(taskId,parentTaskId,execId);
-//            //记录日志
-//            checkSheetProHisClient.insert(his);
-//        }else{
-//            return MessageBody.getMessageBody(false,"上级任务为空！");
-//        }
-//        return MessageBody.getMessageBody(true,"撤销成功!");
-//    }
+//  @RequestMapping(value="rollBack",method =  RequestMethod.POST )
+//  @ResponseBody
+//  public MessageBody rollBack(@RequestParam(value="remark",required=false)String remark,
+//          				@RequestParam(value="taskId",required=true)String taskId) throws Exception{
+//      Task task=workFlowService.getTaskById(taskId);
+//      ProcessInstance pi = runtimeService.createProcessInstanceQuery().processInstanceId(task.getProcessInstanceId()).singleResult();
+//      //4.使用流程实例对象获取BusinessKey
+//      String business_key = pi.getBusinessKey();
+//      String execId=task.getExecutionId();
+//      CheckSheetProHis his=new CheckSheetProHis();
+//      his.setId(ToolUtils.getUUID());
+//      his.setCheckProId(business_key);
+//      his.setOptime(DateUtil.toString(new Date()));
+//      if(remark!=null){
+//          his.setShenpiremark(remark);
+//      }
+//      his.setShenpiaction(task.getName()+"-撤銷");
+//      his.setExecutor(UCHome.getLabUser().getName());
+//
+//      String processInstanceId = task.getProcessInstanceId();
+//      List<HistoricTaskInstance> list = historyService
+//          .createHistoricTaskInstanceQuery()
+//          .processInstanceId(processInstanceId).finished()
+//          .orderByTaskCreateTime().desc().list();
+//      String parentTaskId="";
+//      if (list != null && list.size() > 0) {
+//          //按照完成时间排序取第一个 回退到该节点
+//          parentTaskId=list.get(0).getId();
+//          for (HistoricTaskInstance hti : list) {
+//              System.out.print("taskId:" + hti.getId()+"，");
+//              System.out.print("name:" + hti.getName()+"，");
+//              System.out.print("pdId:" + hti.getProcessDefinitionId()+"，");
+//              System.out.print("assignee:" + hti.getAssignee()+"，");
+//          }
+//      }
+//      //workFlowService.TaskRollBack(taskId);
+//      if(StringUtils.isNotBlank(parentTaskId)){
+//          //插入审批记录
+//          //退回任务
+//          checkSheetClient.rollBackTask(taskId,parentTaskId,execId);
+//          //记录日志
+//          checkSheetProHisClient.insert(his);
+//      }else{
+//          return MessageBody.getMessageBody(false,"上级任务为空！");
+//      }
+//      return MessageBody.getMessageBody(true,"撤销成功!");
+//  }
+    /**
+     * 任务跳转回退（方式二）
+     * 不删除任何历史记录（可以在历史表中标明任务跳转节点）
+     * 改变流程定义的任务出线，完成任务后自动回退到之前的节点
+     */
+    @Autowired
+    Rollback rollback;
+    @PostMapping(value = "/taskJump/{taskId}", produces = MediaType.APPLICATION_JSON_VALUE)
+    public Mytask taskJump(@PathVariable(value = "taskId") String taskId,
+    						@RequestParam(value = "jumpTotaskdefkey") String jumpTotaskdefkey) {
+    	rollback.rollBackToAssignWorkFlow(taskId, jumpTotaskdefkey);
+        Task task=taskService.createTaskQuery().taskDefinitionKey(jumpTotaskdefkey).active().singleResult();
+        return TasktoMyTask.build(task);
+    }
+
     @Autowired
 	MycustomService mycustomService;
     @ApiOperation(value = "customMappers", notes = "自定义操作数据库", position = 2000)
