@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="test">
+
+    <select id="selectMy_custom" parameterType="String" resultType="com.example.demo.entity.Mycustom">
+        SELECT * FROM my_custom WHERE id = #{id,jdbcType=VARCHAR}
+    </select>
+
+    <update id="insertMy_custom" parameterType="com.example.demo.entity.Mycustom">
+        INSERT INTO my_custom(name, dis, id) VALUES (#{name,jdbcType=VARCHAR}, #{dis,jdbcType=VARCHAR}, #{id,jdbcType=VARCHAR})
+    </update>
+
+</mapper>
