@@ -1,10 +1,16 @@
 package com.example.demo.controller;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 
 import org.activiti.bpmn.converter.BpmnXMLConverter;
 import org.activiti.bpmn.model.BpmnModel;
@@ -26,9 +32,14 @@ import org.activiti.engine.repository.ProcessDefinition;
 import org.activiti.engine.runtime.Execution;
 import org.activiti.engine.runtime.ProcessInstance;
 import org.activiti.engine.task.Task;
+import org.apache.commons.io.FileUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -37,9 +48,14 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.multipart.MultipartHttpServletRequest;
 
+import com.example.demo.cmd.BackAndJumpCmd;
 import com.example.demo.cmd.CountersignAddcmd;
+import com.example.demo.cmd.SequentialAndParallelCountersignAddcmd;
 import com.example.demo.cmd.SerialCountersignAddcmd;
+import com.example.demo.entity.MyJsonDateObject;
 import com.example.demo.entity.MyProcessDefinition;
 import com.example.demo.entity.MyProcessInstance;
 import com.example.demo.entity.Mycustom;
@@ -47,13 +63,17 @@ import com.example.demo.entity.Mytask;
 import com.example.demo.entity.UserTaskActivity;
 import com.example.demo.entity.UserTaskProDef;
 import com.example.demo.mycustom.MycustomService;
+import com.example.demo.utils.JsonUtil;
 import com.example.demo.utils.ProcessDefinitionTOmyProcessDefinition;
 import com.example.demo.utils.ProcessInstanceTOmyProcessInstance;
 import com.example.demo.utils.Rollback;
 import com.example.demo.utils.TaskInfoUtils;
 import com.example.demo.utils.TasktoMyTask;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.swagger.annotations.ApiOperation;
+import net.sf.json.JSONObject;
 
 @RestController
 @RequestMapping("/activiti/test1")
@@ -342,86 +362,36 @@ public class Test1Controller {
     @ApiOperation(value = "getBpmnxml", notes = "转化流程定义为editor可用的xml文件", position = 2000)
     @ResponseStatus(value = HttpStatus.OK)
     @GetMapping(value = "/bpmntoxml/{processDefId}", produces = MediaType.APPLICATION_XML_VALUE)
-    public String getBpmnJson(@PathVariable(value="processDefId") String processDefIdkey) {
+    public String getBpmnxml(@PathVariable(value="processDefId") String processDefIdkey) {
         BpmnModel model = repositoryService.getBpmnModel(processDefIdkey);
         return new String(new BpmnXMLConverter().convertToXML(model));
     }
-
+    
 
     /**
-     * 任务回退一步(方式一)(个人感觉比较垃圾：不弄了)
-     * @param remark
-     * @param taskId    当前任务id
-     * @return
-     * 操作：1，删除历史任务表正在运行的任务（当前任务）
-     * 		2，将历史任务表中上一个任务的end_time,doration,delete_reason三个字段设置为空
-     * 		3，运行时的身份链接表（因为处理人除了直接设置指定人处理的方式，act_ru_identitylink表没有数据）
-     * 			》根据testId查出对应记录ID
-     * 			》将ID对应字段的testId设置为空
-     * 			》
-     * 		4，更新运行任务表当前任务回退到跳转之前的任务TASK_DEF_KEY_,FORM_KEY_,NAME_,ID_四个字段和历史任务表中的任务一致
-     * 		5，更新运行实例表中的当前运行流程实例中的ACT_ID_字段，该字段和运行任务表中任务定义id即TASK_DEF_KEY_字段一致
-     */
-//  @RequestMapping(value="rollBack",method =  RequestMethod.POST )
-//  @ResponseBody
-//  public MessageBody rollBack(@RequestParam(value="remark",required=false)String remark,
-//          				@RequestParam(value="taskId",required=true)String taskId) throws Exception{
-//      Task task=workFlowService.getTaskById(taskId);
-//      ProcessInstance pi = runtimeService.createProcessInstanceQuery().processInstanceId(task.getProcessInstanceId()).singleResult();
-//      //4.使用流程实例对象获取BusinessKey
-//      String business_key = pi.getBusinessKey();
-//      String execId=task.getExecutionId();
-//      CheckSheetProHis his=new CheckSheetProHis();
-//      his.setId(ToolUtils.getUUID());
-//      his.setCheckProId(business_key);
-//      his.setOptime(DateUtil.toString(new Date()));
-//      if(remark!=null){
-//          his.setShenpiremark(remark);
-//      }
-//      his.setShenpiaction(task.getName()+"-撤銷");
-//      his.setExecutor(UCHome.getLabUser().getName());
-//
-//      String processInstanceId = task.getProcessInstanceId();
-//      List<HistoricTaskInstance> list = historyService
-//          .createHistoricTaskInstanceQuery()
-//          .processInstanceId(processInstanceId).finished()
-//          .orderByTaskCreateTime().desc().list();
-//      String parentTaskId="";
-//      if (list != null && list.size() > 0) {
-//          //按照完成时间排序取第一个 回退到该节点
-//          parentTaskId=list.get(0).getId();
-//          for (HistoricTaskInstance hti : list) {
-//              System.out.print("taskId:" + hti.getId()+"，");
-//              System.out.print("name:" + hti.getName()+"，");
-//              System.out.print("pdId:" + hti.getProcessDefinitionId()+"，");
-//              System.out.print("assignee:" + hti.getAssignee()+"，");
-//          }
-//      }
-//      //workFlowService.TaskRollBack(taskId);
-//      if(StringUtils.isNotBlank(parentTaskId)){
-//          //插入审批记录
-//          //退回任务
-//          checkSheetClient.rollBackTask(taskId,parentTaskId,execId);
-//          //记录日志
-//          checkSheetProHisClient.insert(his);
-//      }else{
-//          return MessageBody.getMessageBody(false,"上级任务为空！");
-//      }
-//      return MessageBody.getMessageBody(true,"撤销成功!");
-//  }
-    /**
-     * 任务跳转回退（方式二）
+     * 任务跳转回退（方式一）
      * 不删除任何历史记录（可以在历史表中标明任务跳转节点）
      * 改变流程定义的任务出线，完成任务后自动回退到之前的节点
      */
     @Autowired
     Rollback rollback;
     @PostMapping(value = "/taskJump/{taskId}", produces = MediaType.APPLICATION_JSON_VALUE)
-    public Mytask taskJump(@PathVariable(value = "taskId") String taskId,
+    public Mytask taskJump1(@PathVariable(value = "taskId") String taskId,
     						@RequestParam(value = "jumpTotaskdefkey") String jumpTotaskdefkey) {
     	rollback.rollBackToAssignWorkFlow(taskId, jumpTotaskdefkey);
         Task task=taskService.createTaskQuery().taskDefinitionKey(jumpTotaskdefkey).active().singleResult();
         return TasktoMyTask.build(task);
+    }
+    /**
+     * 任务跳转回退（方式二）
+     * 编写命令：将当前任务完成或者删除，针对跳转活动节点新建任务
+     */
+    @PostMapping(value = "/taskJump2/{taskId}", produces = MediaType.APPLICATION_JSON_VALUE)
+    public String taskJump2(@PathVariable(value = "taskId") String taskId,
+    						@RequestParam(value = "jumpToActivityId") String jumpToActivityId,
+    						@RequestParam(value = "operate") String operate,
+    						@RequestBody Map<String, Object> data) {
+        return managementService.executeCommand(new BackAndJumpCmd(taskId,jumpToActivityId,operate,data));
     }
 
     @Autowired
@@ -467,7 +437,6 @@ public class Test1Controller {
     	Execution parent= runtimeService.createExecutionQuery().executionId("120001").singleResult();;
     	return excution.toString()+parent.toString();
     }
-
     @ApiOperation(value = "addAssignee", notes = "并行会签加签", position = 2000)
     @ResponseStatus(value = HttpStatus.OK)
     @GetMapping(value = "/addAssignee/{taskId}", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -485,4 +454,162 @@ public class Test1Controller {
     	managementService.executeCommand(new SerialCountersignAddcmd(taskId,assignee,runtimeService,taskService,isBefore));
     	return "串行前或后加签成功";
     }
+    /**
+     * 串并行会签加签
+     * @param taskId
+     * @param assignee   只支持单人
+     * @param isBefore
+     * @return
+     */
+    @ApiOperation(value = "addAssignee3", notes = "串并行会签加签", position = 2000)
+    @ResponseStatus(value = HttpStatus.OK)
+    @GetMapping(value = "/addAssignee3/{taskId}", produces = MediaType.APPLICATION_JSON_VALUE)
+    public String addAssignee3(@PathVariable(value = "taskId") String taskId,
+                               @RequestParam(value = "assignee") String assignee,
+                               @RequestParam(value = "isBefore",defaultValue = "0",required=false) Boolean isBefore) {
+        return managementService.executeCommand(new SequentialAndParallelCountersignAddcmd(taskId, assignee, runtimeService, taskService, isBefore));
+    }
+    /**
+     * 解析resource下的.json文件中的对象或数组对象
+     * 使用的是net.sf.json-lib提供的方法
+     * 引入依赖<dependency>
+     *     		<groupId>net.sf.json-lib</groupId>
+     *         	<artifactId>json-lib</artifactId>
+     *          <version>2.4</version>
+     *          <classifier>jdk15</classifier>
+     *        </dependency>
+     * @return List<MyJsonDateObject>
+     */
+    @ApiOperation(value = "getJsonResource", notes = "解析resource下的.json文件", position = 1300)
+    @ResponseStatus(value = HttpStatus.OK)
+    @GetMapping(value = "/getJsonResource", produces = MediaType.APPLICATION_JSON_VALUE)
+    public List<MyJsonDateObject> getJsonResource(){
+        List<MyJsonDateObject> list = new ArrayList<>();
+        String path = getClass().getClassLoader().getResource("i18n-set.json").toString();
+        path = path.replace("\"", "/");
+        if(path.contains(":")){
+            path = path.replace("file:/","");
+        }
+        try {
+			String jsonStr = FileUtils.readFileToString(new File(path), "UTF-8");
+			
+			String jsonStr2=JSONObject.fromObject(jsonStr).getString("lang");
+			list=JsonUtil.jsonStrToBeanList(jsonStr2,MyJsonDateObject.class);       
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+        return list;
+    }
+    /**
+     * 解析resource下的.json文件
+     * 使用com.fasterxml.jackson.databind提供的方法
+     * 根据节点树解析json文件
+     * 
+     * @return
+     */
+    @ApiOperation(value = "getJsonResource2", notes = "解析resource下的.json文件", position = 1300)
+    @ResponseStatus(value = HttpStatus.OK)
+    @GetMapping(value = "/getJsonResource2", produces = MediaType.APPLICATION_JSON_VALUE)
+    public List<MyJsonDateObject> getJsonResource2(){
+    	 List<MyJsonDateObject> list = new ArrayList<>();
+         String path = getClass().getClassLoader().getResource("i18n-set.json").toString();
+         path = path.replace("\"", "/");//去掉双引号
+         if(path.contains(":")){
+             path = path.replace("file:/","");
+         }
+      try{
+      String jsonStr = FileUtils.readFileToString(new File(path), "UTF-8");
+      ObjectMapper objectMapper=new ObjectMapper();
+      JsonNode objectNode = objectMapper.readTree(jsonStr);
+      JsonNode langNode = objectMapper.readTree(objectNode.get("lang").toString());
+      for (int i = 0; i < langNode.size(); i++) {
+      	MyJsonDateObject langResource = new MyJsonDateObject();
+          langResource.setTitle(String.valueOf(langNode.get(i).get("title")).replace("\"",""));//.replace("\"","")
+          langResource.setValue(String.valueOf(langNode.get(i).get("value")).replace("\"",""));
+          list.add(langResource);
+      }
+      }catch (Exception e){
+    	  e.printStackTrace();
+      }
+    	return list;
+    }
+    /**
+     * 单个文件上传
+     * 保存在指定文件夹
+     * 
+     * @param file
+     */
+    @ApiOperation(value = "uploadFile", notes = "文件上传，保存在f盘下")
+    @ResponseStatus(value = HttpStatus.OK)
+    @PostMapping(value = "/uploadFile", produces = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public void uploadFile(@RequestParam(value = "file", required = false) MultipartFile file){
+    	if(!file.isEmpty()) {
+			String fileName = new Date().getTime()+file.getOriginalFilename();	
+			//放在f盘下的aaa目录下
+			String path = "F:\\aaa\\";
+			File dest = new File(path + fileName);
+			try {
+				file.transferTo(dest);
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+    	}	
+    }
+    /**
+     * 多个文件上传
+     * 保存在指定文件夹
+     * SpringBoot有大小限制单个文件不超过1M，多个文件不超过10M
+     * 修改：application.properties中加配置spring.servlet.multipart.max-file-size=10MB
+     * 			限制单个文件和总大小		  spring.servlet.multipart.max-request-size=100MB
+     * 
+     * @param request
+     * @return
+     */
+    @ApiOperation(value = "uploadMultiFile", notes = "多文件上传，保存在f盘下")
+    @ResponseStatus(value = HttpStatus.OK)
+    @PostMapping(value = "/uploadMultiFile", produces = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public String uploadMultiFile(HttpServletRequest request){
+    	MultipartHttpServletRequest newrequest=(MultipartHttpServletRequest)request;
+    	List<MultipartFile> files=newrequest.getFiles("file");
+    	//放在f盘下的aaa目录下
+		String path = "F:\\aaa\\";
+        for (int i = 0; i < files.size(); i++) {
+            MultipartFile file = files.get(i);
+            if (file.isEmpty()) {
+                return "上传第" + (i++) + "个文件失败";
+            }
+            String fileName = new Date().getTime()+file.getOriginalFilename();
+            File dest = new File(path + fileName);
+            try {
+				file.transferTo(dest);
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+        }
+        return "success";
+    }
+    /**
+     * 文件下载
+     * 根据文件名下载类路径resources下的文件
+     * @param response
+     * @param fileName
+     * @throws IOException 
+     */
+	@ApiOperation(value = "downloadFile", notes = "文件下载")
+	@ResponseStatus(value = HttpStatus.OK)
+	@GetMapping(value = "/downloadFile", produces = MediaType.MULTIPART_FORM_DATA_VALUE)
+	public ResponseEntity<?> downloadFile(@RequestParam(value = "fileName", required = false) String fileName) throws IOException {
+		Resource resource = new ClassPathResource(fileName);
+		File file = null;
+		if(resource.exists()) {
+	        file = resource.getFile();
+		}else {
+			return null;
+		}
+		HttpHeaders headers = new HttpHeaders();
+		headers.setContentDispositionFormData("attachment", new String(fileName.getBytes("utf-8"), "iso-8859-1"));//文件名
+		headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);// 文件内容是字节流
+
+		return new ResponseEntity<byte[]>(FileUtils.readFileToByteArray(file), headers, HttpStatus.CREATED);
+	}
 }

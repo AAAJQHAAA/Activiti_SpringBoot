@@ -7,6 +7,7 @@ import org.activiti.engine.RuntimeService;
 import org.activiti.engine.TaskService;
 import org.activiti.engine.impl.bpmn.behavior.AbstractBpmnActivityBehavior;
 import org.activiti.engine.impl.bpmn.behavior.SequentialMultiInstanceBehavior;
+import org.activiti.engine.impl.el.JuelExpression;
 import org.activiti.engine.impl.interceptor.Command;
 import org.activiti.engine.impl.interceptor.CommandContext;
 import org.activiti.engine.impl.persistence.entity.ExecutionEntity;
@@ -53,18 +54,7 @@ public class SerialCountersignAddcmd implements Command<Void>{
 		Execution execution=runtimeService.createExecutionQuery().executionId(task.getExecutionId()).singleResult();
 		ExecutionEntity ee=(ExecutionEntity) execution;
 		TaskEntity te=(TaskEntity) task;
-		
-		//修改流程变量
-		List<String> assigneeList=new ArrayList<>();
-		assigneeList=(List<String>) runtimeService.getVariable(ee.getId(), "assigneeList");
-		if(isBefore) {
-			//插入指定位置之前
-			assigneeList.add(assigneeList.indexOf(te.getAssignee()),assignee);
-		}else {
-			//插入指定位置之后
-			assigneeList.add(assigneeList.indexOf(te.getAssignee())+1,assignee);
-		}
-		runtimeService.setVariable(ee.getId(), "assigneeList", assigneeList);
+	
 		//将现有任务删除
 		commandContext.getTaskEntityManager().deleteTask(te, TaskEntity.DELETE_REASON_DELETED, true);
 		ee.removeTask(te);
@@ -75,6 +65,23 @@ public class SerialCountersignAddcmd implements Command<Void>{
 		BeanUtils.copyProperties(sequentialMultiInstanceBehavior, mySequentialMultiInstanceBehavior);
 		userTaskActivityBehavior.setMultiInstanceActivityBehavior(mySequentialMultiInstanceBehavior);
 		activity.setActivityBehavior(mySequentialMultiInstanceBehavior);
+		JuelExpression collectionExpression=(JuelExpression) sequentialMultiInstanceBehavior.getCollectionExpression();
+		//找出集合对应名字
+		String expressionText=collectionExpression.getExpressionText();
+		expressionText=expressionText.replace("$", "");
+		expressionText=expressionText.replace("{", "");
+		expressionText=expressionText.replace("}", "");
+		//修改流程变量
+		List<String> assigneeList=new ArrayList<>();
+		assigneeList=(List<String>) runtimeService.getVariable(ee.getId(), expressionText);
+		if(isBefore) {
+			//插入指定位置之前
+			assigneeList.add(assigneeList.indexOf(te.getAssignee()),assignee);
+		}else {
+			//插入指定位置之后
+			assigneeList.add(assigneeList.indexOf(te.getAssignee())+1,assignee);
+		}
+		runtimeService.setVariable(ee.getId(), expressionText, assigneeList);
 		//执行实例设置Activity，再转信号执行
 		ee.setActivity(activity);
 		ee.signal(null, null);

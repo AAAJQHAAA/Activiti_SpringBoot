@@ -21,7 +21,8 @@ public class ExcelUtils {
     private final static String xlsx = "xlsx";
 
     /**
-     * 读入excel文件，解析后返回
+     * 读入excel文件，解析后返回数组集合
+     * 
      * @param file
      * @throws IOException
      */
@@ -39,9 +40,9 @@ public class ExcelUtils {
                 if(sheet == null){
                     continue;
                 }
-                //获得当前sheet的开始行
+                //获得当前sheet的开始行索引
                 int firstRowNum  = sheet.getFirstRowNum();
-                //获得当前sheet的结束行
+                //获得当前sheet的结束行索引
                 int lastRowNum = sheet.getLastRowNum();
                 //循环除了第一行的所有行
                 for(int rowNum = firstRowNum+1;rowNum <= lastRowNum;rowNum++){
@@ -50,11 +51,11 @@ public class ExcelUtils {
                     if(row == null){
                         continue;
                     }
-                    //获得当前行的开始列
+                    //获得当前行的开始列索引
                     int firstCellNum = row.getFirstCellNum();
                     //获得当前行的列数
                     int lastCellNum = row.getPhysicalNumberOfCells();
-                    String[] cells = new String[row.getPhysicalNumberOfCells()];
+                    String[] cells = new String[lastCellNum];
                     //循环当前行
                     for(int cellNum = firstCellNum; cellNum < lastCellNum;cellNum++){
                         Cell cell = row.getCell(cellNum);
@@ -67,6 +68,12 @@ public class ExcelUtils {
         }
         return list;
     }
+    /**
+     * 检查是否为excel文件
+     * 
+     * @param file
+     * @throws IOException
+     */
     public static void checkFile(MultipartFile file) throws IOException{
         //判断文件是否存在
         if(null == file){
@@ -79,6 +86,12 @@ public class ExcelUtils {
             throw new IOException(fileName + "不是excel文件");
         }
     }
+    /**
+     * 获取excel对象WorkBook
+     * 
+     * @param file
+     * @return
+     */
     public static Workbook getWorkBook(MultipartFile file) {
         //获得文件名
         String fileName = file.getOriginalFilename();
@@ -99,6 +112,12 @@ public class ExcelUtils {
         }
         return workbook;
     }
+    /**
+     * 获取单元格中字符串（内容）
+     * 
+     * @param cell
+     * @return
+     */
     public static String getCellValue(Cell cell){
         String cellValue = "";
         if(cell == null){
@@ -230,6 +249,7 @@ public class ExcelUtils {
                 rowContent.setHeight((short) (100*20));
             }
         }
+        //合并单元格（开始行，结束行，开始列，结束列）
         sheet.addMergedRegion(new CellRangeAddress(list.size(),list.size(),1,9));
         sheet.addMergedRegion(new CellRangeAddress(0,1,9,9));
 
